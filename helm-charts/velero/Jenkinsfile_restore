@@ -1,0 +1,42 @@
+// a.groovy
+import groovy.transform.Field
+import groovy.lang.Binding
+pipeline {
+    agent any
+    stages {
+        stage('Restore backup from PROD to DR') {
+            agent {
+                docker {
+                    image 'versoview/base-image:base_helm_dev_2'
+                    registryUrl 'https://registry.hub.docker.com'
+                    args '-u root:root'
+                    registryCredentialsId 'dockerhub_generic'
+                }
+            }
+            environment {
+                ENVIRONMENT = "dr"
+                aws_region = "ap-south-1"
+                aws_access_key_id = credentials('aws_access_key_id')
+                aws_secret_access_key = credentials('aws_secret_access_key')
+            }
+            steps {
+                checkout([$class: 'GitSCM', branches: [[name: '*/prod-master']], doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], userRemoteConfigs: [[credentialsId: 'GT_PAT', url: 'https://github.com/Alpha-TechUSA/helm-charts.git']]])
+                withCredentials([kubeconfigFile(credentialsId: "${ENVIRONMENT}_eks_kubeconfig", variable: 'KUBECONFIG')]) {
+                    sh "aws configure set aws_access_key_id ${aws_access_key_id}"
+                    sh "aws configure set aws_secret_access_key ${aws_secret_access_key}"
+                    sh "aws configure set default.region ${aws_region}"
+                    sh "mkdir ~/.kube"
+                    sh "echo ${KUBECONFIG} > ~/.kube/config"
+                    sh "kubectl get nodes"
+                    sh "wget https://github.com/vmware-tanzu/velero/releases/download/v1.3.2/velero-v1.3.2-linux-amd64.tar.gz"
+                    sh "tar -xvf velero-v1.3.2-linux-amd64.tar.gz -C /tmp"
+                    sh "mv /tmp/velero-v1.3.2-linux-amd64/velero /usr/local/bin"
+                    sh "velero version"
+                    sh "chmod 755 velero/velero_restore.sh"
+                    // Trigger setup.sh script to install control plane on k8s
+                    sh "./velero/velero_restore.sh ${ENVIRONMENT} ${aws_region} ${aws_access_key_id} ${aws_secret_access_key}"
+                }
+                }
+            }
+        }
+}

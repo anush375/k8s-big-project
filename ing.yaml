@@ -1,0 +1,28 @@
+
+   
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: ingress-versoview-ai
+  namespace: versoview-ai-ns-dev
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: 200m
+    nginx.ingress.kubernetes.io/proxy-read-timeout: '360'
+    nginx.ingress.kubernetes.io/proxy-send-timeout: '360'
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: '360'
+    kubernetes.io/ingress.class: nginx
+    kubernetes.io/tls-acme: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  tls:
+    - hosts:
+      - "ai.dev.versoview.us"
+      secretName: versoview-ai-secret-tls
+  rules:
+  - host: ai.dev.versoview.us
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: versoview-ai-svc
+          servicePort: 5000

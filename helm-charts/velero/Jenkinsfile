@@ -1,0 +1,90 @@
+// a.groovy
+import groovy.transform.Field
+import groovy.lang.Binding
+pipeline {
+    agent any
+    parameters{
+        choice(name: 'ENVIRONMENT', choices: ["PROD","DR"], description: 'Select the desire environment')
+        //extendedChoice description: '', multiSelectDelimiter: ',', name: 'STAGE_CHOICE', quoteValue: false, saveJSONParameterToFile: false, type: 'PT_CHECKBOX', value: 'PROD,DR', visibleItemCount: 3
+    }
+    stages {
+        stage('Set up velero PROD') {
+            when {
+                anyOf{
+                    expression { params.ENVIRONMENT == 'PROD'}
+                }
+            }
+            agent {
+                docker {
+                    image 'versoview/base-image:base_helm_dev_2'
+                    registryUrl 'https://registry.hub.docker.com'
+                    args '-u root:root'
+                    registryCredentialsId 'dockerhub_generic'
+                }
+            }
+            environment {
+                ENVIRONMENT = "prod"
+                aws_region = "ap-southeast-1"
+                aws_access_key_id = credentials('aws_access_key_id')
+                aws_secret_access_key = credentials('aws_secret_access_key')
+            }
+            steps {
+                checkout([$class: 'GitSCM', branches: [[name: '*/main']], doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], userRemoteConfigs: [[credentialsId: 'GT_PAT', url: 'https://github.com/Alpha-TechUSA/helm-charts.git']]])
+                withCredentials([kubeconfigFile(credentialsId: "${ENVIRONMENT}_eks_kubeconfig", variable: 'KUBECONFIG')]) {
+                    sh "aws configure set aws_access_key_id ${aws_access_key_id}"
+                    sh "aws configure set aws_secret_access_key ${aws_secret_access_key}"
+                    sh "aws configure set default.region ${aws_region}"
+                    sh "mkdir ~/.kube"
+                    sh "echo ${KUBECONFIG} > ~/.kube/config"
+                    sh "kubectl get nodes"
+                    sh "wget https://github.com/vmware-tanzu/velero/releases/download/v1.3.2/velero-v1.3.2-linux-amd64.tar.gz"
+                    sh "tar -xvf velero-v1.3.2-linux-amd64.tar.gz -C /tmp"
+                    sh "mv /tmp/velero-v1.3.2-linux-amd64/velero /usr/local/bin"
+                    sh "velero version"
+                    sh "chmod 755 velero/velero_set_up_prod.sh"
+                    // Trigger setup.sh script to install control plane on k8s
+                    sh "./velero/velero_set_up_prod.sh ${ENVIRONMENT} ${aws_region} ${aws_access_key_id} ${aws_secret_access_key}"
+                }
+                }
+            }
+        stage('Set up velero DR') {
+            when {
+                anyOf{
+                    expression { params.ENVIRONMENT == 'DR'}
+                }
+            }
+            agent {
+                docker {
+                    image 'versoview/base-image:base_helm_dev_2'
+                    registryUrl 'https://registry.hub.docker.com'
+                    args '-u root:root'
+                    registryCredentialsId 'dockerhub_generic'
+                }
+            }
+            environment {
+                ENVIRONMENT = "dr"
+                aws_region = "ap-south-1"
+                aws_access_key_id = credentials('aws_access_key_id')
+                aws_secret_access_key = credentials('aws_secret_access_key')
+            }
+            steps {
+                checkout([$class: 'GitSCM', branches: [[name: '*/main']], doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], userRemoteConfigs: [[credentialsId: 'GT_PAT', url: 'https://github.com/Alpha-TechUSA/helm-charts.git']]])
+                withCredentials([kubeconfigFile(credentialsId: "${ENVIRONMENT}_eks_kubeconfig", variable: 'KUBECONFIG')]) {
+                    sh "aws configure set aws_access_key_id ${aws_access_key_id}"
+                    sh "aws configure set aws_secret_access_key ${aws_secret_access_key}"
+                    sh "aws configure set default.region ${aws_region}"
+                    sh "mkdir ~/.kube"
+                    sh "echo ${KUBECONFIG} > ~/.kube/config"
+                    sh "kubectl get nodes"
+                    sh "wget https://github.com/vmware-tanzu/velero/releases/download/v1.3.2/velero-v1.3.2-linux-amd64.tar.gz"
+                    sh "tar -xvf velero-v1.3.2-linux-amd64.tar.gz -C /tmp"
+                    sh "mv /tmp/velero-v1.3.2-linux-amd64/velero /usr/local/bin"
+                    sh "velero version"
+                    sh "chmod 755 velero/velero_set_up_prod.sh"
+                    // Trigger setup.sh script to install control plane on k8s
+                    sh "./velero/velero_set_up_prod.sh ${ENVIRONMENT} ${aws_region} ${aws_access_key_id} ${aws_secret_access_key}"
+                }
+                }
+            }
+        }
+}

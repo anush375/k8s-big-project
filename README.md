@@ -1,2 +1,8 @@
-# k8s-big-project
-This project involves Kubernetes, Velero (for backup), Terraform for EKS cluster provisioning and VPC implementation. Manifests files like Deployments, Services, Ingress, External DNS, CA. Automated through CI/CD Jenkins and goes through vulnerability scanning with Policy as Code Checkov
+sum:events("statefulset:<statefulset_name>").rollup(sum, 300)
+Replace <statefulset_name> with the actual name of your StatefulSet.
+
+Define Monitor: When creating the monitor, in the metric query section, you can reference this custom metric. Here's an example:
+
+scss
+Copy code
+sum(last_5m):sum:events("statefulset:<statefulset_name>").rollup(sum, 300) by {statefulset_name} == 0
