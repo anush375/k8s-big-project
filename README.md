@@ -1,4 +1,5 @@
 How to install mongodb 4.4.3 on ubuntu 18.04 (Not related to project)
+
 resource "aws_instance" "mongo_vm" {
   ami                         = var.ami_id
   instance_type               = "t2.large"
